@@ -1,3 +1,39 @@
+# 🛡️ Segurança: evita subir arquivos sensíveis
+*.env
+*.txt
+*.key
+*.pem
+*.cer
+*.crt
+*.pfx
+*.bak
+
+# 🐍 Python
 __pycache__/
+*.py[cod]
 *.pyc
-.env
+*.pyo
+*.pyd
+
+# 📦 Ambientes virtuais
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 🧪 Testes temporários
+*.log
+*.tmp
+
+# 📦 Pacotes e dependências
+*.egg-info/
+dist/
+build/
+
+# ⚙️ IDEs e sistemas
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
