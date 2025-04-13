@@ -12,6 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
+# Configura chave corretamente para OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -21,21 +22,23 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # Print bruto da requisição
-        print("📥 RAW:", request.data.decode())
+        # Tenta extrair os dados do request
+        try:
+            dados = request.get_json(force=True)
+        except Exception as json_error:
+            print("❌ Erro ao decodificar JSON:", json_error)
+            print("📥 RAW DATA:", request.data.decode())
+            return jsonify({"erro": "JSON malformado"}), 400
 
-        # Tenta converter para JSON
-        dados = request.get_json(force=True)
-        print("📥 JSON:", dados)
+        print("📥 JSON recebido:", dados)
 
-        # Extrai dados
         numero = dados.get("phone")
-        mensagem = dados.get("message") or ""
+        mensagem = dados.get("message")
         caption = dados.get("image", {}).get("caption", "")
         conteudo = caption if caption else mensagem
 
-        if not numero or not conteudo:
-            print("⚠️ Dados ausentes ou vazios")
+        if not conteudo or not numero:
+            print("⚠️ Conteúdo ou número ausente!")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
         resposta = openai.ChatCompletion.create(
@@ -47,18 +50,21 @@ def webhook():
         )
 
         texto = resposta['choices'][0]['message']['content']
-        print("🤖 Resposta:", texto)
+        print("🤖 Resposta gerada:", texto)
 
+        # Envia resposta para a Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
-            "message": {"text": texto}
+            "message": {
+                "text": texto
+            }
         }
 
         envio = requests.post(zapi_url, json=payload)
         envio.raise_for_status()
 
-        print("✅ Enviado para Z-API com sucesso!")
+        print("✅ Enviado com sucesso via Z-API")
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
