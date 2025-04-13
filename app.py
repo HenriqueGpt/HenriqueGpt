@@ -22,29 +22,23 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # Tenta extrair os dados do request
-        try:
-            dados = request.get_json(force=True)
-        except Exception as json_error:
-            print("❌ Erro ao decodificar JSON:", json_error)
-            print("📥 RAW DATA:", request.data.decode())
-            return jsonify({"erro": "JSON malformado"}), 400
-
-        print("📥 JSON recebido:", dados)
+        print("📥 RAW DATA:", request.data.decode())  # Exibe o JSON bruto
+        dados = request.get_json(force=True)
+        print("📥 JSON tratado:", dados)
 
         numero = dados.get("phone")
         mensagem = dados.get("message")
         caption = dados.get("image", {}).get("caption", "")
-        conteudo = caption if caption else mensagem
+        conteudo = caption or mensagem
 
         if not conteudo or not numero:
-            print("⚠️ Conteúdo ou número ausente!")
+            print("⚠️ Conteúdo ou número ausente.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você é um assistente útil e direto da Hydrotech Brasil."},
+                {"role": "system", "content": "Você é um assistente útil da Hydrotech Brasil."},
                 {"role": "user", "content": conteudo}
             ]
         )
@@ -52,7 +46,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia resposta para a Z-API
+        # Envia para Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -68,7 +62,7 @@ def webhook():
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO GERAL:", e)
+        print("❌ ERRO:", str(e))
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
