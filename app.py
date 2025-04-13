@@ -12,7 +12,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -22,19 +21,21 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        dados = request.get_json()
-        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())  # debug do corpo cru
-        print("📥 Dados tratados (JSON):", dados)
+        # Print bruto da requisição
+        print("📥 RAW:", request.data.decode())
 
+        # Tenta converter para JSON
+        dados = request.get_json(force=True)
+        print("📥 JSON:", dados)
+
+        # Extrai dados
         numero = dados.get("phone")
-        conteudo = (
-            dados.get("message")
-            or dados.get("image", {}).get("caption")
-            or ""
-        )
+        mensagem = dados.get("message") or ""
+        caption = dados.get("image", {}).get("caption", "")
+        conteudo = caption if caption else mensagem
 
-        if not conteudo or not numero:
-            print("⚠️ Dados incompletos.")
+        if not numero or not conteudo:
+            print("⚠️ Dados ausentes ou vazios")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
         resposta = openai.ChatCompletion.create(
@@ -46,25 +47,22 @@ def webhook():
         )
 
         texto = resposta['choices'][0]['message']['content']
-        print("🤖 Resposta gerada:", texto)
+        print("🤖 Resposta:", texto)
 
-        # Envia resposta para a Z-API (v2)
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
-            "message": {
-                "text": texto
-            }
+            "message": {"text": texto}
         }
 
         envio = requests.post(zapi_url, json=payload)
         envio.raise_for_status()
 
-        print("✅ Enviado com sucesso via Z-API")
+        print("✅ Enviado para Z-API com sucesso!")
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO:", e)
+        print("❌ ERRO GERAL:", e)
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
