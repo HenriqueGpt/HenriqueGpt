@@ -12,6 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
+# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -25,18 +26,16 @@ def webhook():
         print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
         print("📥 JSON:", dados)
 
-        if dados.get("isGroup"):
-            print("📛 Ignorado: mensagem de grupo.")
-            return jsonify({"status": "ignorado grupo"}), 200
-
         numero = dados.get("phone")
-        mensagem = dados.get("text", {}).get("message", "")
-        conteudo = mensagem
+        mensagem = dados.get("text", {}).get("message")
+        caption = dados.get("image", {}).get("caption", "")
+        conteudo = caption if caption else mensagem
 
         if not conteudo or not numero:
             print("⚠️ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
+        # Geração com ChatGPT
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -48,7 +47,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia via Z-API
+        # Envio para o WhatsApp via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -64,7 +63,9 @@ def webhook():
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO:", e)
+        import traceback
+        print("❌ ERRO:", str(e))
+        traceback.print_exc()  # <- Aqui ele mostra a linha exata no terminal
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
