@@ -1,98 +1,72 @@
-import os
-import json
-import requests
 from flask import Flask, request, jsonify
+import os
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
 
+ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
+ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 app = Flask(__name__)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Chaves
-openai.api_key = os.getenv("OPENAI_API_KEY")
-zapi_instance_id = os.getenv("ZAPI_INSTANCE_ID")
-zapi_token = os.getenv("ZAPI_TOKEN")
+@app.route('/')
+def index():
+    return '🚀 HenriqueGPT rodando com Z-API!'
 
-client = OpenAI()
-
-@app.route("/")
-def home():
-    return "HenriqueGPT na nuvem! ✅"
-
-@app.route("/webhook", methods=["POST"])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        data = request.get_json()
-        print("📥 Dados recebidos:", json.dumps(data, indent=2, ensure_ascii=False))
+        dados = request.json
+        print("📥 Dados recebidos:", dados)
 
-        mensagem = extrair_mensagem(data)
-        if not mensagem:
-            print("⚠️ Mensagem vazia ou inválida.")
-            return jsonify({"status": "ignorado"}), 200
+        mensagem = dados.get("message", "")
+        numero = dados.get("phone", "")
+        imagem = dados.get("image", {})
+        caption = imagem.get("caption", "")
 
-        print("✉️ Pergunta recebida:", mensagem)
+        if not numero:
+            print("❌ Dados incompletos.")
+            return jsonify({"erro": "Dados incompletos"}), 400
+
+        conteudo = caption if caption else mensagem
+
+        if not conteudo:
+            print("⚠️ Mensagem ou legenda não identificada.")
+            return jsonify({"erro": "Nada para responder."}), 400
 
         resposta = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você é um assistente útil e objetivo."},
-                {"role": "user", "content": mensagem}
+                { "role": "user", "content": conteudo }
             ]
         )
 
-        texto = resposta.choices[0].message.content.strip()
-        print("🤖 Resposta gerada:", texto)
+        texto = resposta.choices[0].message.content
+        print("✅ RESPOSTA GPT:", texto)
 
-        numero = extrair_numero(data)
-        enviar_resposta_zapi(zapi_instance_id, zapi_token, numero, texto)
+        # Envia resposta via Z-API
+        zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/send-text"
+        headers = {
+            "Authorization": f"Bearer {ZAPI_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "phone": numero,
+            "message": texto
+        }
 
-        return jsonify({"status": "enviado"}), 200
+        envio = requests.post(zapi_url, json=payload, headers=headers)
+        envio.raise_for_status()
+
+        return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO GERAL:")
-        print(e)
-        return jsonify({"status": "erro", "detalhes": str(e)}), 500
+        print("❌ ERRO GERAL:", e)
+        return jsonify({"erro": str(e)}), 500
 
-def extrair_mensagem(dados):
-    try:
-        if dados.get("text"):
-            return dados["text"]["body"]
-        elif dados.get("image") and dados["image"].get("caption"):
-            return dados["image"]["caption"]
-        elif dados.get("message"):
-            return dados["message"]
-        else:
-            return None
-    except Exception as e:
-        print("❌ Erro ao extrair mensagem:", e)
-        return None
-
-def extrair_numero(dados):
-    try:
-        if "phone" in dados:
-            return dados["phone"]
-        elif "from" in dados:
-            return dados["from"]
-        return "numero_desconhecido"
-    except Exception as e:
-        print("❌ Erro ao extrair número:", e)
-        return "erro"
-
-def enviar_resposta_zapi(instance_id, token, telefone, resposta):
-    url = f"https://api.z-api.io/instances/{instance_id}/send-text"
-    headers = {
-        "Content-Type": "application/json",
-        "apikey": token
-    }
-    payload = {
-        "phone": telefone,
-        "message": resposta
-    }
-
-    envio = requests.post(url, json=payload, headers=headers)
-    envio.raise_for_status()
-    print("✅ Resposta enviada com sucesso.")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
