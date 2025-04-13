@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave corretamente para OpenAI
+# Configura chave da OpenAI (v1.x)
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -22,23 +22,30 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        print("📥 RAW DATA:", request.data.decode())  # Exibe o JSON bruto
-        dados = request.get_json(force=True)
-        print("📥 JSON tratado:", dados)
+        # Log bruto da requisição
+        raw = request.data.decode('utf-8', errors='replace')
+        print("📥 RAW DATA RECEBIDA:", raw)
+
+        # Tenta decodificar o JSON
+        dados = request.get_json(force=True, silent=True)
+        print("📥 JSON PARSEADO:", dados)
+
+        if not dados:
+            return jsonify({"erro": "corpo inválido ou vazio"}), 400
 
         numero = dados.get("phone")
         mensagem = dados.get("message")
         caption = dados.get("image", {}).get("caption", "")
-        conteudo = caption or mensagem
+        conteudo = caption if caption else mensagem
 
         if not conteudo or not numero:
-            print("⚠️ Conteúdo ou número ausente.")
+            print("⚠️ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você é um assistente útil da Hydrotech Brasil."},
+                {"role": "system", "content": "Você é um assistente útil e direto da Hydrotech Brasil."},
                 {"role": "user", "content": conteudo}
             ]
         )
@@ -46,7 +53,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia para Z-API
+        # Envia via Z-API (v2)
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -62,7 +69,7 @@ def webhook():
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO:", str(e))
+        print("❌ ERRO:", e)
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
