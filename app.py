@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave da OpenAI
+# Chave OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -26,13 +26,18 @@ def webhook():
         print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
         print("📥 JSON:", dados)
 
-        # Ignora grupos
+        # Ignora mensagens de grupo
         if dados.get("isGroup"):
             print("📛 Ignorado: mensagem de grupo.")
-            return jsonify({"status": "ignorado"}), 200
+            return jsonify({"mensagem": "Ignorado: mensagem de grupo"}), 200
 
         numero = dados.get("phone")
-        conteudo = dados.get("text", {}).get("message")
+        conteudo = (
+            dados.get("text", {}).get("message") or
+            dados.get("message") or
+            dados.get("image", {}).get("caption") or
+            None
+        )
 
         if not conteudo or not numero:
             print("⚠️ Dados incompletos.")
@@ -49,7 +54,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia para Z-API v2
+        # Envia via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
