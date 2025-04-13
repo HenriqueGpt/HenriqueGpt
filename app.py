@@ -1,7 +1,7 @@
 import os
 import requests
+import openai
 from flask import Flask, request, jsonify
-from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,41 +10,45 @@ app = Flask(__name__)
 
 # Variáveis de ambiente
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
-TOKEN = os.getenv("ZAPI_TOKEN")
+ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
+ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Configura chave da OpenAI
+openai.api_key = OPENAI_API_KEY
 
-@app.route("/")
+@app.route('/')
 def home():
-    return "HenriqueGPT está online."
+    return "HenriqueGPT online! ✅"
 
-@app.route("/webhook", methods=["POST"])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        dados = request.json
+        dados = request.get_json()
         print("📥 Dados recebidos:", dados)
 
         numero = dados.get("phone")
-        nome = dados.get("senderName")
-        pergunta = dados.get("message")
+        mensagem = dados.get("message")
+        caption = dados.get("image", {}).get("caption", "")
 
-        if not pergunta:
-            return jsonify({"erro": "Dados incompletos"}), 400
+        conteudo = caption if caption else mensagem
 
-        resposta = client.chat.completions.create(
+        if not conteudo or not numero:
+            print("⚠️ Dados incompletos.")
+            return jsonify({"erro": "mensagem ou número ausente"}), 400
+
+        resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você é um assistente útil."},
-                {"role": "user", "content": pergunta}
+                {"role": "system", "content": "Você é um assistente útil e direto da Hydrotech Brasil."},
+                {"role": "user", "content": conteudo}
             ]
         )
 
-        texto = resposta.choices[0].message.content
-        print("🤖 Resposta:", texto)
+        texto = resposta['choices'][0]['message']['content']
+        print("🤖 Resposta gerada:", texto)
 
-        # Envio pela Z-API (corrigido)
-        url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{TOKEN}/v2/send-message"
+        # Envia para a Z-API (v2)
+        zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
             "message": {
@@ -52,15 +56,15 @@ def webhook():
             }
         }
 
-        envio = requests.post(url, json=payload)
+        envio = requests.post(zapi_url, json=payload)
         envio.raise_for_status()
 
-        return jsonify({"status": "Mensagem enviada com sucesso"}), 200
+        print("✅ Enviado com sucesso via Z-API")
+        return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO GERAL:")
-        print(e)
+        print("❌ ERRO:", e)
         return jsonify({"erro": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run()
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
