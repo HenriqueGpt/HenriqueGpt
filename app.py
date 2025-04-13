@@ -12,7 +12,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configuração da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -23,8 +22,11 @@ def home():
 def webhook():
     try:
         dados = request.get_json()
-        print("📥 RAW:", request.data.decode())
-        print("📥 JSON tratado:", dados)
+        print("📥 JSON recebido:", dados)
+
+        if dados.get("isGroup"):
+            print("⚠️ Mensagem ignorada (vinda de grupo)")
+            return jsonify({"info": "Mensagem de grupo ignorada"}), 200
 
         numero = dados.get("phone")
         mensagem = dados.get("message", "")
@@ -46,9 +48,8 @@ def webhook():
         )
 
         texto = resposta['choices'][0]['message']['content']
-        print("🤖 Resposta gerada:", texto)
+        print("🤖 Resposta:", texto)
 
-        # Enviar para Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -60,7 +61,7 @@ def webhook():
         envio = requests.post(zapi_url, json=payload)
         envio.raise_for_status()
 
-        print("✅ Resposta enviada com sucesso via Z-API")
+        print("✅ Mensagem enviada com sucesso via Z-API")
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
