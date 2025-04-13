@@ -23,7 +23,8 @@ def home():
 def webhook():
     try:
         dados = request.get_json()
-        print("📥 Dados recebidos:", dados)
+        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())  # 👈 isso aqui!
+        print("📥 Dados tratados (JSON):", dados)
 
         numero = dados.get("phone")
         mensagem = dados.get("message")
