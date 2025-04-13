@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave corretamente para OpenAI v1.x
+# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -23,13 +23,15 @@ def home():
 def webhook():
     try:
         dados = request.get_json()
-        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())  # 👈 isso aqui!
+        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())  # debug do corpo cru
         print("📥 Dados tratados (JSON):", dados)
 
         numero = dados.get("phone")
-        mensagem = dados.get("message")
-        caption = dados.get("image", {}).get("caption", "")
-        conteudo = caption if caption else mensagem
+        conteudo = (
+            dados.get("message")
+            or dados.get("image", {}).get("caption")
+            or ""
+        )
 
         if not conteudo or not numero:
             print("⚠️ Dados incompletos.")
@@ -46,7 +48,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia para a Z-API (v2)
+        # Envia resposta para a Z-API (v2)
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
