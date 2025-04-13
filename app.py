@@ -4,11 +4,10 @@ import os
 
 app = Flask(__name__)
 
-# Carrega as variáveis de ambiente definidas no Render
+# Variáveis de ambiente
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
-
 ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/send-text"
 
 @app.route("/")
@@ -21,23 +20,21 @@ def webhook():
         data = request.get_json()
         print("📥 Dados recebidos:", data)
 
-        # Extrai número
-        numero = data.get("phone")
-
-        # Pega texto de mensagem ou legenda da imagem
-        mensagem = None
-        if "text" in data:
-            mensagem = data["text"].get("message")
-        elif "image" in data:
-            mensagem = data["image"].get("caption", "")
+        # CAPTION OU TEXTO
+        mensagem = ""
+        if "text" in data and "message" in data["text"]:
+            mensagem = data["text"]["message"]
+        elif "image" in data and "caption" in data["image"]:
+            mensagem = data["image"]["caption"]
         else:
-            mensagem = None
+            print("⚠️ Dados incompletos recebidos")
+            return jsonify({"erro": "mensagem ou caption não encontrada"}), 400
 
+        numero = data.get("phone")
         if not mensagem or not numero:
-            print("⚠️ Mensagem ou número ausente.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        # Requisição para OpenAI
+        # 🔮 Enviando pergunta ao ChatGPT
         resposta = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
@@ -50,10 +47,11 @@ def webhook():
             }
         )
 
+        resposta.raise_for_status()
         texto = resposta.json()["choices"][0]["message"]["content"]
-        print(f"🤖 Resposta gerada: {texto}")
+        print("🤖 Resposta gerada:", texto)
 
-        # Envia resposta via Z-API
+        # ✅ Enviando resposta via Z-API
         envio = requests.post(
             ZAPI_URL,
             headers={"Content-Type": "application/json"},
@@ -65,7 +63,7 @@ def webhook():
         return jsonify({"resposta": texto})
 
     except Exception as e:
-        print("❌ Erro ao processar webhook:", str(e))
+        print("❌ Erro:", e)
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == "__main__":
