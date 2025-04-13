@@ -4,9 +4,11 @@ import os
 
 app = Flask(__name__)
 
+# Carrega as variáveis de ambiente definidas no Render
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
+
 ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/send-text"
 
 @app.route("/")
@@ -16,30 +18,26 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        data = request.json
+        data = request.get_json()
         print("📥 Dados recebidos:", data)
 
-        # Tentativa de extrair número e mensagem considerando múltiplos formatos
-        numero = (
-            data.get("phone") or
-            data.get("From") or
-            data.get("from") or
-            data.get("sender", {}).get("phone") or
-            data.get("participantPhone")
-        )
+        # Extrai número
+        numero = data.get("phone")
 
-        mensagem = (
-            data.get("text", {}).get("message") or
-            data.get("message") or
-            data.get("caption") or
-            data.get("body")
-        )
+        # Pega texto de mensagem ou legenda da imagem
+        mensagem = None
+        if "text" in data:
+            mensagem = data["text"].get("message")
+        elif "image" in data:
+            mensagem = data["image"].get("caption", "")
+        else:
+            mensagem = None
 
-        if not numero or not mensagem:
-            print("⚠️ Dados incompletos ou inválidos recebidos.")
-            return jsonify({"erro": "Dados incompletos ou inválidos"}), 400
+        if not mensagem or not numero:
+            print("⚠️ Mensagem ou número ausente.")
+            return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        # Chamada ao ChatGPT
+        # Requisição para OpenAI
         resposta = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
@@ -52,23 +50,22 @@ def webhook():
             }
         )
 
-        resposta.raise_for_status()
         texto = resposta.json()["choices"][0]["message"]["content"]
         print(f"🤖 Resposta gerada: {texto}")
 
-        # Enviando de volta via Z-API
+        # Envia resposta via Z-API
         envio = requests.post(
             ZAPI_URL,
             headers={"Content-Type": "application/json"},
             json={"phone": numero, "message": texto}
         )
-        envio.raise_for_status()
 
+        envio.raise_for_status()
         print("✅ Mensagem enviada com sucesso!")
         return jsonify({"resposta": texto})
 
     except Exception as e:
-        print("❌ Erro geral no webhook:", str(e))
+        print("❌ Erro ao processar webhook:", str(e))
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == "__main__":
