@@ -18,26 +18,21 @@ def webhook():
         mensagem = None
         numero = None
 
-        # 1. Mensagem de texto tradicional
         if "text" in data and "message" in data["text"]:
             mensagem = data["text"]["message"]
             numero = data.get("phone")
-
-        # 2. Imagem com legenda
         elif "image" in data and "caption" in data["image"]:
             mensagem = data["image"]["caption"]
             numero = data.get("phone")
-
-        # 3. Mensagem direta (sem estrutura text/image)
         elif "message" in data:
             mensagem = data["message"]
             numero = data.get("phone")
 
         if not mensagem or not numero:
-            print("❌ Dados incompletos recebidos.")
+            print("❌ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        resposta = requests.post(
+        openai_response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
@@ -49,8 +44,15 @@ def webhook():
             }
         )
 
-        texto = resposta.json()["choices"][0]["message"]["content"]
-        print(f"🤖 Resposta gerada: {texto}")
+        resposta = openai_response.json()
+        print("📦 Resposta da OpenAI:", resposta)
+
+        if "choices" not in resposta:
+            erro = resposta.get("error", {})
+            print("❌ Erro da OpenAI:", erro)
+            return jsonify({"erro_openai": erro}), 500
+
+        texto = resposta["choices"][0]["message"]["content"]
 
         envio = requests.post(
             f"https://api.z-api.io/instances/{os.environ['ZAPI_INSTANCE_ID']}/token/{os.environ['ZAPI_TOKEN']}/send-text",
@@ -63,7 +65,7 @@ def webhook():
         return jsonify({"resposta": texto})
 
     except Exception as e:
-        print("❌ Erro no webhook:")
+        print("❌ ERRO GERAL:")
         traceback.print_exc()
         return jsonify({"erro": str(e)}), 500
 
