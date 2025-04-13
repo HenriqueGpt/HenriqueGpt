@@ -4,49 +4,33 @@ import os
 
 app = Flask(__name__)
 
-# 🔐 Suas chaves e tokens
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = "sk-proj-..."  # substitua aqui pela sua chave real
 ZAPI_INSTANCE_ID = "3DFA1FF90F752079A4A8FA8592F99CB9"
 ZAPI_TOKEN = "140585B259646B43AD0A4618"
-
-# 📤 URL de envio da Z-API
 ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/send-text"
 
-# 🌐 Teste rápido no navegador
 @app.route("/")
 def home():
     return "HenriqueGPT na nuvem! ✅"
 
-# 🔄 Webhook para processar mensagens
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        print("🔎 Content-Type recebido:", request.headers.get("Content-Type"))
+        data = request.json
+        print("📥 Dados recebidos:", data)
 
-        # Tenta carregar o JSON da requisição
-        try:
-            data = request.get_json(force=True)
-        except Exception as e:
-            print("❌ JSON inválido recebido:", e)
-            return jsonify({"erro": "JSON inválido ou mal formatado", "detalhe": str(e)}), 400
+        if not data or "text" not in data or "phone" not in data:
+            print("❌ Dados incompletos recebidos")
+            return jsonify({"erro": "dados incompletos"}), 400
 
-        print("📥 Dados recebidos no webhook:", data)
-
-        # Validação dos campos esperados
+        mensagem = data["text"].get("message")
         numero = data.get("phone")
-        mensagem = data.get("text", {}).get("message")
 
-        if not numero or not mensagem:
-            print("❗ Estrutura inesperada. Conteúdo:", data)
-            return jsonify({
-                "erro": "Número ou mensagem ausente no JSON",
-                "formato_esperado": {
-                    "phone": "553199999999",
-                    "text": {"message": "Olá"}
-                }
-            }), 400
+        if not mensagem or not numero:
+            print("❌ Mensagem ou número ausente")
+            return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        # Chamada à API da OpenAI
+        # Chamada à OpenAI
         resposta = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
@@ -59,26 +43,31 @@ def webhook():
             }
         )
 
-        texto = resposta.json()["choices"][0]["message"]["content"]
-        print(f"🤖 Resposta gerada: {texto}")
+        if resposta.status_code != 200:
+            print("❌ Erro na resposta da OpenAI:", resposta.text)
+            return jsonify({"erro": "Erro ao consultar OpenAI"}), 500
 
-        # Envio da resposta via Z-API
+        texto = resposta.json()["choices"][0]["message"]["content"]
+        print("🤖 Resposta gerada:", texto)
+
+        # Envio pelo Z-API
         envio = requests.post(
             ZAPI_URL,
             headers={"Content-Type": "application/json"},
             json={"phone": numero, "message": texto}
         )
 
-        envio.raise_for_status()
-        print("✅ Mensagem enviada com sucesso!")
+        if envio.status_code != 200:
+            print("❌ Erro ao enviar mensagem pelo ZAPI:", envio.text)
+            return jsonify({"erro": "Erro ao enviar mensagem"}), 500
 
-        return jsonify({"resposta": texto})
+        print("✅ Mensagem enviada com sucesso!")
+        return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ Erro no webhook:", e)
+        print("❌ Erro geral:", str(e))
         return jsonify({"erro": str(e)}), 500
 
-# 🚀 Start do servidor
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
