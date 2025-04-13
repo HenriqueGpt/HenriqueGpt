@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave da OpenAI (v1.x)
+# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -22,16 +22,13 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        # Log bruto da requisição
-        raw = request.data.decode('utf-8', errors='replace')
-        print("📥 RAW DATA RECEBIDA:", raw)
+        # Exibe conteúdo bruto recebido
+        raw_data = request.data.decode()
+        print("📥 RAW DATA RECEBIDA:", raw_data)
 
-        # Tenta decodificar o JSON
-        dados = request.get_json(force=True, silent=True)
+        # Tenta converter pra JSON
+        dados = request.get_json(force=True)
         print("📥 JSON PARSEADO:", dados)
-
-        if not dados:
-            return jsonify({"erro": "corpo inválido ou vazio"}), 400
 
         numero = dados.get("phone")
         mensagem = dados.get("message")
@@ -53,7 +50,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia via Z-API (v2)
+        # Envio via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -69,7 +66,7 @@ def webhook():
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO:", e)
+        print("❌ ERRO GERAL:", str(e))
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
