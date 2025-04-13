@@ -1,9 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import requests
 import os
-import traceback
+from openai import OpenAI
 
 app = Flask(__name__)
+
+# Carregar variáveis de ambiente do Render
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+zapi_instance_id = os.environ.get("ZAPI_INSTANCE_ID")
+zapi_token = os.environ.get("ZAPI_TOKEN")
+
+client = OpenAI(api_key=openai_api_key)
 
 @app.route("/")
 def home():
@@ -12,65 +19,53 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        data = request.json
-        print("📥 Dados recebidos:", data)
+        dados = request.json
+        print("📥 Dados recebidos:", dados)
 
-        mensagem = None
-        numero = None
+        # Verifica se a mensagem recebida é de texto
+        texto_recebido = None
 
-        # Tentativa de identificar o conteúdo da mensagem recebida
-        if "text" in data and "message" in data["text"]:
-            mensagem = data["text"]["message"]
-            numero = data.get("phone")
-        elif "image" in data and "caption" in data["image"]:
-            mensagem = data["image"]["caption"]
-            numero = data.get("phone")
-        elif "message" in data:
-            mensagem = data["message"]
-            numero = data.get("phone")
+        if dados.get("text"):
+            texto_recebido = dados["text"]["body"]
 
-        if not mensagem or not numero:
-            print("❌ Dados incompletos.")
-            return jsonify({"erro": "mensagem ou número ausente"}), 400
+        elif dados.get("image"):
+            caption = dados["image"].get("caption")
+            texto_recebido = caption if caption else "(imagem sem legenda)"
 
-        openai_response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "gpt-3.5-turbo",
-                "messages": [{"role": "user", "content": mensagem}]
-            }
+        if not texto_recebido:
+            print("❌ Mensagem não suportada ou vazia.")
+            return "", 200
+
+        # Enviar pergunta para o ChatGPT
+        resposta = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": texto_recebido}
+            ]
         )
 
-        resposta = openai_response.json()
-        print("📦 Resposta da OpenAI:", resposta)
+        texto = resposta.choices[0].message.content
+        telefone = dados.get("phone")
 
-        # Verificação se a chave "choices" existe na resposta
-        if "choices" not in resposta:
-            erro = resposta.get("error", {})
-            print("❌ Erro da OpenAI:", erro)
-            return jsonify({"erro_openai": erro}), 500
+        # Enviar a resposta ao WhatsApp pela Z-API (v2)
+        url = f"https://api.z-api.io/instance/{zapi_instance_id}/send-text"
 
-        texto = resposta["choices"][0]["message"]["content"]
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {zapi_token}"
+        }
 
-        envio = requests.post(
-            f"https://api.z-api.io/instances/{os.environ['ZAPI_INSTANCE_ID']}/token/{os.environ['ZAPI_TOKEN']}/send-text",
-            headers={"Content-Type": "application/json"},
-            json={"phone": numero, "message": texto}
-        )
+        payload = {
+            "phone": telefone,
+            "message": texto
+        }
 
+        envio = requests.post(url, headers=headers, json=payload)
         envio.raise_for_status()
-        print("✅ Mensagem enviada com sucesso!")
-        return jsonify({"resposta": texto})
+
+        print("✅ Resposta enviada com sucesso.")
+        return "", 200
 
     except Exception as e:
-        print("❌ ERRO GERAL:")
-        traceback.print_exc()
-        return jsonify({"erro": str(e)}), 500
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+        print("❌ Erro:", e)
+        return "", 500
