@@ -12,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave corretamente para OpenAI v1.x
+# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -22,16 +22,21 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        raw_data = request.data.decode()
+        print("📥 DADOS RECEBIDOS RAW:", raw_data)
+
         dados = request.get_json()
-        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
-        print("📥 Dados tratados (JSON):", dados)
+        print("📥 JSON:", dados)
+
+        # Ignorar mensagens de grupo
+        if dados.get("isGroup"):
+            print("📛 Ignorado: mensagem de grupo.")
+            return jsonify({"status": "ignorado"}), 200
 
         numero = dados.get("phone")
-        mensagem = dados.get("message")
-        caption = dados.get("image", {}).get("caption", "")
-        conteudo = caption if caption else mensagem
+        mensagem = dados.get("text", {}).get("message", "")
 
-        if not conteudo or not numero:
+        if not numero or not mensagem:
             print("⚠️ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
@@ -39,14 +44,14 @@ def webhook():
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um assistente útil e direto da Hydrotech Brasil."},
-                {"role": "user", "content": conteudo}
+                {"role": "user", "content": mensagem}
             ]
         )
 
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia para a Z-API (v2)
+        # Enviar de volta via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -56,7 +61,6 @@ def webhook():
         }
 
         envio = requests.post(zapi_url, json=payload)
-        print("📦 Payload enviado para Z-API:", payload)
         print("📨 Resposta da Z-API:", envio.status_code, envio.text)
         envio.raise_for_status()
 
