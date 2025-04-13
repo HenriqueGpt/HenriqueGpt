@@ -1,4 +1,5 @@
 import os
+import traceback
 import requests
 import openai
 from flask import Flask, request, jsonify
@@ -12,6 +13,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
+# Configura chave da OpenAI
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -21,24 +23,25 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
         dados = request.get_json()
-        print("📥 JSON recebido:", dados)
+        print("📥 JSON:", dados)
 
-        if dados.get("isGroup"):
-            print("⚠️ Mensagem ignorada (vinda de grupo)")
-            return jsonify({"info": "Mensagem de grupo ignorada"}), 200
+        # Ignora mensagens de grupo
+        if dados.get("isGroup", False):
+            print("📛 Ignorado: mensagem de grupo.")
+            return jsonify({"status": "ignorado (grupo)"}), 200
 
         numero = dados.get("phone")
-        mensagem = dados.get("message", "")
+        mensagem = dados.get("message")
         caption = dados.get("image", {}).get("caption", "")
-        conteudo = caption or mensagem or "[Mensagem vazia]"
+        conteudo = caption if caption else mensagem
 
-        if not numero:
-            print("❌ Número ausente!")
-            return jsonify({"erro": "Número ausente!"}), 400
+        if not numero or not conteudo:
+            print("⚠️ Dados incompletos.")
+            return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        print(f"💬 Conteúdo recebido: {conteudo}")
-
+        # Chamada OpenAI
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -48,25 +51,25 @@ def webhook():
         )
 
         texto = resposta['choices'][0]['message']['content']
-        print("🤖 Resposta:", texto)
+        print("🤖 RESPOSTA:", texto)
 
+        # Envio via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
-            "message": {
-                "text": texto
-            }
+            "message": {"text": texto}
         }
 
         envio = requests.post(zapi_url, json=payload)
         envio.raise_for_status()
 
-        print("✅ Mensagem enviada com sucesso via Z-API")
+        print("✅ Mensagem enviada via Z-API")
         return jsonify({"resposta": texto}), 200
 
     except Exception as e:
-        print("❌ ERRO GERAL:", e)
-        return jsonify({"erro": str(e)}), 500
+        print("❌ ERRO INTERNO:", e)
+        traceback.print_exc()  # LOGA o erro real no console da Render
+        return jsonify({"erro": "erro interno no servidor"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
