@@ -1,80 +1,86 @@
-from flask import Flask, request, jsonify
 import os
 import requests
-import openai
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
+# Carregar variáveis de ambiente (.env ou configuradas no Render)
 load_dotenv()
 
 app = Flask(__name__)
 
-# 🔐 Chaves de ambiente
-openai.api_key = os.getenv("OPENAI_API_KEY")
-zapi_instance_id = os.getenv("ZAPI_INSTANCE_ID")
-zapi_token = os.getenv("ZAPI_TOKEN")
-
-@app.route("/", methods=["GET"])
-def index():
+@app.route('/')
+def home():
     return "HenriqueGPT na nuvem! ✅"
 
-@app.route("/webhook", methods=["POST"])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        dados = request.json
-        print("📥 Dados recebidos:", dados)
+        data = request.get_json()
+        print("📥 Dados recebidos:", data)
 
-        mensagem = None
-        numero = None
+        # --- TRATAMENTO DOS DADOS DA Z-API ---
+        mensagem = ""
+        numero = ""
+        
+        if 'message' in data:
+            if 'text' in data['message']:
+                mensagem = data['message']['text']
+            elif 'image' in data['message'] and 'caption' in data['message']['image']:
+                mensagem = data['message']['image']['caption']
+            else:
+                mensagem = "[mensagem não reconhecida]"
 
-        # 👀 Detecta formato de mensagem
-        if "message" in dados and "text" in dados["message"]:
-            mensagem = dados["message"]["text"]
-            numero = dados["message"]["phone"]
-        elif "text" in dados:
-            mensagem = dados["text"]
-            numero = dados["phone"]
-        elif "image" in dados and "caption" in dados["image"]:
-            mensagem = dados["image"]["caption"]
-            numero = dados["phone"]
-        else:
-            print("⚠️ Dados incompletos ou não suportados")
-            return jsonify({"status": "ignorado"}), 400
+        if 'phone' in data:
+            numero = data['phone']
+        elif 'message' in data and 'phone' in data['message']:
+            numero = data['message']['phone']
 
-        print("📲 Mensagem:", mensagem)
-        print("📞 Número:", numero)
+        if not mensagem or not numero:
+            print("⚠️ Mensagem ou número não encontrado.")
+            return jsonify({"status": "ignored"}), 400
 
-        # 🧠 Envia para o ChatGPT
-        resposta = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Você é um assistente especializado da Hydrotech Brasil."},
+        # --- ENVIAR PARA O CHATGPT ---
+        openai_api_key = os.environ["OPENAI_API_KEY"]
+        headers = {
+            "Authorization": f"Bearer {openai_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        body = {
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "system", "content": "Você é um assistente da Hydrotech Brasil."},
                 {"role": "user", "content": mensagem}
             ]
-        )
+        }
 
-        texto = resposta.choices[0].message.content.strip()
-        print("🤖 Resposta:", texto)
+        resposta = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body)
+        resposta.raise_for_status()
+        texto = resposta.json()["choices"][0]["message"]["content"]
 
-        # 🚀 Envia a resposta via Z-API (formato novo)
-        url = f"https://api.z-api.io/instance/{zapi_instance_id}/send-text"
-        headers = {
-            "Authorization": f"Bearer {zapi_token}",
-            "Content-Type": "application/json"
+        print("🤖 Resposta do ChatGPT:", texto)
+
+        # --- ENVIAR PARA O WHATSAPP VIA Z-API ---
+        url = f"https://api.z-api.io/instances/{os.environ['ZAPI_INSTANCE_ID']}/send-text"
+        zapi_headers = {
+            "Content-Type": "application/json",
+            "Authorization": os.environ["ZAPI_TOKEN"]
         }
         payload = {
             "phone": numero,
             "message": texto
         }
 
-        envio = requests.post(url, headers=headers, json=payload)
+        envio = requests.post(url, json=payload, headers=zapi_headers)
         envio.raise_for_status()
-        print("📤 Resposta enviada com sucesso")
+        print("✅ Enviado para o WhatsApp com sucesso!")
 
-        return jsonify({"status": "enviado"}), 200
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        print("❌ Erro geral:", str(e))
-        return jsonify({"erro": str(e)}), 500
+        print("❌ Erro no webhook:", str(e))
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+# Iniciar o servidor
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
