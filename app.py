@@ -22,36 +22,31 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        raw_data = request.data.decode()
-        print("📥 DADOS RECEBIDOS RAW:", raw_data)
-
         dados = request.get_json()
+        print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
         print("📥 JSON:", dados)
 
-        # Ignorar mensagens de grupo
-        if dados.get("isGroup"):
-            print("📛 Ignorado: mensagem de grupo.")
-            return jsonify({"status": "ignorado"}), 200
-
         numero = dados.get("phone")
-        mensagem = dados.get("text", {}).get("message", "")
+        mensagem = dados.get("text", {}).get("message", "")  # 👈 Correção aqui
+        conteudo = mensagem
 
-        if not numero or not mensagem:
+        if not conteudo or not numero:
             print("⚠️ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
+        # Consulta ao ChatGPT
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um assistente útil e direto da Hydrotech Brasil."},
-                {"role": "user", "content": mensagem}
+                {"role": "user", "content": conteudo}
             ]
         )
 
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Enviar de volta via Z-API
+        # Envia resposta via Z-API
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
@@ -61,7 +56,6 @@ def webhook():
         }
 
         envio = requests.post(zapi_url, json=payload)
-        print("📨 Resposta da Z-API:", envio.status_code, envio.text)
         envio.raise_for_status()
 
         print("✅ Enviado com sucesso via Z-API")
