@@ -26,15 +26,18 @@ def webhook():
         print("📥 DADOS RECEBIDOS RAW:", request.data.decode())
         print("📥 JSON:", dados)
 
+        # Ignora grupos
+        if dados.get("isGroup"):
+            print("📛 Ignorado: mensagem de grupo.")
+            return jsonify({"status": "ignorado"}), 200
+
         numero = dados.get("phone")
-        mensagem = dados.get("text", {}).get("message", "")  # 👈 Correção aqui
-        conteudo = mensagem
+        conteudo = dados.get("text", {}).get("message")
 
         if not conteudo or not numero:
             print("⚠️ Dados incompletos.")
             return jsonify({"erro": "mensagem ou número ausente"}), 400
 
-        # Consulta ao ChatGPT
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -46,7 +49,7 @@ def webhook():
         texto = resposta['choices'][0]['message']['content']
         print("🤖 Resposta gerada:", texto)
 
-        # Envia resposta via Z-API
+        # Envia para Z-API v2
         zapi_url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}/v2/send-message"
         payload = {
             "phone": numero,
