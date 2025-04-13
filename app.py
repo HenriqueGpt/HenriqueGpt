@@ -11,7 +11,7 @@ ZAPI_URL = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN
 
 @app.route("/")
 def home():
-    return "HenriqueGPT está online!"
+    return "HenriqueGPT na nuvem! ✅"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -24,8 +24,6 @@ def webhook():
 
         if not mensagem or not numero:
             return jsonify({"erro": "mensagem ou número ausente"}), 400
-
-        print(f"✅ Mensagem de {numero}: {mensagem}")
 
         resposta = requests.post(
             "https://api.openai.com/v1/chat/completions",
@@ -49,7 +47,7 @@ def webhook():
         )
 
         envio.raise_for_status()
-        print("✅ Enviado com sucesso!")
+        print("✅ Mensagem enviada com sucesso!")
         return jsonify({"resposta": texto})
 
     except Exception as e:
