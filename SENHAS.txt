@@ -1,0 +1,16 @@
+
+CHAVE SECRETA OPEN AI
+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
+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
+
+https://app.z-api.io/app/auth/new-account
+Xvs@356a
+
+API da instância
+https://api.z-api.io/instances/3DFA1FF90F752079A4A8FA8592F99CB9/token/140585B259646B43AD0A4618/send-text
+
+ID da instância
+3DFA1FF90F752079A4A8FA8592F99CB9
+
+Token da instância
+140585B259646B43AD0A4618

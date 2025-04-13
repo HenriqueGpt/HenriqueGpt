@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HenriqueBot</title>
+</head>
+<body>
+  <h2>Fale com o bot</h2>
+  <input id="msg" placeholder="Digite sua pergunta" size="40">
+  <button onclick="enviar()">Enviar</button>
+  <p><strong>Resposta:</strong> <span id="resposta"></span></p>
+
+  <script>
+    async function enviar() {
+      const mensagem = document.getElementById("msg").value;
+      const resposta = await fetch("http://127.0.0.1:5000/mensagem", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ mensagem: mensagem })
+      });
+
+      const data = await resposta.json();
+      document.getElementById("resposta").innerText = data.resposta;
+    }
+  </script>
+</body>
+</html>
