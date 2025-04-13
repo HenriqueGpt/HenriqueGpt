@@ -5,7 +5,6 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
 load_dotenv()
-
 app = Flask(__name__)
 
 # Variáveis de ambiente
@@ -13,7 +12,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 
-# Configura chave da OpenAI
+# Configura chave corretamente para OpenAI v1.x
 openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
@@ -29,7 +28,6 @@ def webhook():
         numero = dados.get("phone")
         mensagem = dados.get("message")
         caption = dados.get("image", {}).get("caption", "")
-
         conteudo = caption if caption else mensagem
 
         if not conteudo or not numero:
